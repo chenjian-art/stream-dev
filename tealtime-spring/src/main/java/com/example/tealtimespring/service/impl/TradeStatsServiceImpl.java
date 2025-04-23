@@ -1,0 +1,33 @@
+package com.example.tealtimespring.service.impl;
+
+import com.example.tealtimespring.bean.TradeProvinceOrderAmount;
+import com.example.tealtimespring.mapper.TradeStatsMapper;
+import com.example.tealtimespring.service.TradeStatsService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+import java.util.List;
+
+/**
+ * @Package com.example.tealtimespring.service.impl.TradeStatsServiceImpl
+ * @Author chen.jian
+ * @Date 2025/4/22 16:54
+ * @description: 交易
+ */
+
+@Service
+public class TradeStatsServiceImpl implements TradeStatsService {
+    @Autowired
+    private TradeStatsMapper tradeStatsMapper;
+
+    @Override
+    public BigDecimal getGMV(Integer date) {
+        return tradeStatsMapper.selectGMV(date);
+    }
+
+    @Override
+    public List<TradeProvinceOrderAmount> getProvinceAmount(Integer date) {
+        return tradeStatsMapper.selectProvinceAmount(date);
+    }
+}
