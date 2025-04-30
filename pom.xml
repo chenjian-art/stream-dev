@@ -10,6 +10,7 @@
     <packaging>pom</packaging>
     <modules>
         <module>stream-common</module>
+        <module>steam-v1</module>
     </modules>
 
 
