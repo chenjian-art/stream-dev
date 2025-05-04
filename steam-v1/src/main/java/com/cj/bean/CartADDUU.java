@@ -6,7 +6,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * @Package bean.CartADDUU
- * @Author ayang
+ * @Author chen.jian
  * @Date 2025/4/16 11:38
  * @description: 加购用户数
  */

@@ -185,7 +185,7 @@ public class DwsTrafficHomeDetailPageViewWindow  {
                 return com.alibaba.fastjson2.JSON.toJSONString(trafficHomeDetailPageViewBean);
             }
         });
-//        map.print();
+        map.print();
 //        1> {"curDate":"2025-04-16","edt":"2025-04-16 23:09:21","goodDetailUvCt":1,"homeUvCt":0,"stt":"2025-04-16 23:09:18"}
 //        Caused by: org.apache.doris.flink.exception.DorisRuntimeException: tabel {} stream load error: realtime_v1.DwsTrafficHomeDetailPageViewWindow, see more in [CANCELLED][DATA_QUALITY_ERROR]Encountered unqualified data, stop processing
 

@@ -177,7 +177,8 @@ public class DwsTrafficVcChArIsNewPageViewWindow  {
                             }
                         }
                 );
-//        result.print();
+        result.print();
+
 //        2> TrafficPageViewBean(stt=2025-04-16 23:31:10, edt=2025-04-16 23:31:20, cur_date=2025-04-16, vc=v2.1.134, ch=oppo, ar=11, isNew=1, uvCt=0, svCt=0, pvCt=1, durSum=19526, ts=1744817474280)
 
         SingleOutputStreamOperator<String> map = result

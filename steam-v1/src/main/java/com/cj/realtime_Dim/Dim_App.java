@@ -84,7 +84,7 @@ public class Dim_App extends BaseApp {
         });
 //        2> CommonTable(sourceTable=base_trademark, sinkTable=dim_base_trademark, sinkColumns=id,tm_name, sinkFamily=info, sinkRowKey=id, op=c)
 
-//        tpds.print();
+        tpds.print();
         tpds.map(
                 new RichMapFunction<CommonTable, CommonTable>() {
 

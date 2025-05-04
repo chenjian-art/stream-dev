@@ -10,7 +10,7 @@ import java.math.BigDecimal;
 
 /**
  * @Package bean.TradeSkuOrderBean
- * @Author ayang
+ * @Author chen.jian
  * @Date 2025/4/16 14:28
  * @description:
  */

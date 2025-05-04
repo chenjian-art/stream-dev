@@ -6,7 +6,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * @Package realtime_Dim.bean.TableProcessDwd
- * @Author ayang
+ * @Author chen.jian
  * @Date 2025/4/14 14:40
  * @description: 配置表
  */

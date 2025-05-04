@@ -6,7 +6,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * @Package realtime_Dim.bean.CommonTable
- * @Author ayang
+ * @Author chen.jian
  * @Date 2025/4/8 21:56
  * @description: 公共实体类
  */

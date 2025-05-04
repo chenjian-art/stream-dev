@@ -185,7 +185,7 @@ public class DwsUserUserLoginWindow {
                 }
         );
 
-//        reduce.print();
+        reduce.print();
 //        3> UserLoginBean(stt=2025-04-16 14:00:00, edt=2025-04-16 17:00:00, curDate=2025-04-16, backCt=1, uuCt=0, ts=1744788137467)
 
         //转成json
