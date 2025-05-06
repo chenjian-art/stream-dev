@@ -12,8 +12,8 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import java.util.Properties;
 /**
  * @Package PACKAGE_NAME.Flink_Cdc
- * @Author a_yang
- * @Date 2025/4/8 9:31
+ * @Author chen.jian
+ * @Date 2025/4/8 8:41
  * @description: cdc
  */
 public class Flink_Cdc {

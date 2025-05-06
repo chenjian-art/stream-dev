@@ -121,7 +121,7 @@ public class DwdBaseDb  {
 //        //TODO 对关联后的数据进行处理   --- process
         SingleOutputStreamOperator<Tuple2<JSONObject, TableProcessDwd>> splitDS = connectDS.process(new BaseDbTableProcessFunction(mapStateDescriptor));
         //TODO 将处理逻辑比较简单的事实表数据写到kafka的不同主题中
-
+        splitDS.print();
         splitDS.sinkTo(finksink.getKafkaSink());
 
 

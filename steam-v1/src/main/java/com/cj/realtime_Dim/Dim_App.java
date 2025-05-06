@@ -24,10 +24,10 @@ import com.cj.realtime_Dim.flinkfcation.flinksinkHbase;
 import com.cj.realtime_Dim.flinkfcation.flinksorceutil;
 import com.cj.utils.Hbaseutli;
 /**
- * @Package realtime_Dim.Dim_App
- * @Author ayang
- * @Date 2025/4/8 19:31
- * @description: 读取
+ * @Package com.cj.realtime_Dim.Dim_APP
+ * @Author chen.jian
+ * @Date 2025/5/5 10:48
+ * @description: dim
  */
 public class Dim_App extends BaseApp {
 
@@ -41,8 +41,9 @@ public class Dim_App extends BaseApp {
                 JSONObject jsonObj = JSON.parseObject(s);
                 String db = jsonObj.getJSONObject("source").getString("db");
                 String type = jsonObj.getString("op");
+
                 String data = jsonObj.getString("after");
-                if ("realtime".equals(db)
+                if ("gmall_config".equals(db)
                         && ("c".equals(type)
                         || "u".equals(type)
                         || "d".equals(type)
@@ -54,19 +55,13 @@ public class Dim_App extends BaseApp {
                 }
             }
         });
-//        json-->> {"op":"c","after":{"birthday":1284,"create_time":1654646400000,"login_name":"63k5cvx","nick_name":"艺欣","name":"邹艺欣","user_level":"1","phone_num":"13512773463","id":42,"email":"63k5cvx@sohu.com"},"source":{"thread":49,"server_id":1,"version":"1.9.7.Final","file":"mysql-bin.000006","connector":"mysql","pos":1572056,"name":"mysql_binlog_source","row":0,"ts_ms":1744418624000,"snapshot":"false","db":"realtime","table":"user_info"},"ts_ms":1744418621273}
-//
-//        kafkaDs.print("json-->");
 
         //cdc
         MySqlSource<String> getmysqlsource = flinksorceutil.getmysqlsource("gmall2025_config", "table_process_dim");
         DataStreamSource<String> mySQL_source = env.fromSource(getmysqlsource, WatermarkStrategy.noWatermarks(), "MySQL Source")
                 .setParallelism(1);// 设置 sink 节点并行度为 1
-//        mySQL_source.print();
-        //"op":"r": {"before":null,"after":{"source_table":"activity_info","sink_table":"dim_activity_info","sink_family":"info","sink_columns":"id,activity_name,activity_type,activity_desc,start_time,end_time,create_time","sink_row_key":"id"},"source":{"version":"1.9.7.Final","connector":"mysql","name":"mysql_binlog_source","ts_ms":0,"snapshot":"false","db":"gmall2024_config","sequence":null,"table":"table_process_dim","server_id":0,"gtid":null,"file":"","pos":0,"row":0,"thread":null,"query":null},"op":"r","ts_ms":1716812196180,"transaction":null}
-        //"op":"c": {"before":null,"after":{"source_table":"a","sink_table":"a","sink_family":"a","sink_columns":"aaa","sink_row_key":"aa"},"source":{"version":"1.9.7.Final","connector":"mysql","name":"mysql_binlog_source","ts_ms":1716812267000,"snapshot":"false","db":"gmall2024_config","sequence":null,"table":"table_process_dim","server_id":1,"gtid":null,"file":"mysql-bin.000002","pos":11423611,"row":0,"thread":14,"query":null},"op":"c","ts_ms":1716812265698,"transaction":null}
-        //"op":"u": {"before":{"source_table":"a","sink_table":"a","sink_family":"a","sink_columns":"aaa","sink_row_key":"aa"},"after":{"source_table":"a","sink_table":"a","sink_family":"a","sink_columns":"aaabbb","sink_row_key":"aa"},"source":{"version":"1.9.7.Final","connector":"mysql","name":"mysql_binlog_source","ts_ms":1716812311000,"snapshot":"false","db":"gmall2024_config","sequence":null,"table":"table_process_dim","server_id":1,"gtid":null,"file":"mysql-bin.000002","pos":11423960,"row":0,"thread":14,"query":null},"op":"u","ts_ms":1716812310215,"transaction":null}
-        //"op":"d": {"before":{"source_table":"a","sink_table":"a","sink_family":"a","sink_columns":"aaabbb","sink_row_key":"aa"},"after":null,"source":{"version":"1.9.7.Final","connector":"mysql","name":"mysql_binlog_source","ts_ms":1716812341000,"snapshot":"false","db":"gmall2024_config","sequence":null,"table":"table_process_dim","server_id":1,"gtid":null,"file":"mysql-bin.000002","pos":11424323,"row":0,"thread":14,"query":null},"op":"d","ts_ms":1716812340475,"transaction":null}
+
+
         SingleOutputStreamOperator<CommonTable> tpds = mySQL_source.map(new MapFunction<String, CommonTable>() {
             @Override
             public CommonTable map(String s) throws Exception {
@@ -82,7 +77,6 @@ public class Dim_App extends BaseApp {
                 return commonTable;
             }
         });
-//        2> CommonTable(sourceTable=base_trademark, sinkTable=dim_base_trademark, sinkColumns=id,tm_name, sinkFamily=info, sinkRowKey=id, op=c)
 
         tpds.print();
         tpds.map(
@@ -132,7 +126,6 @@ public class Dim_App extends BaseApp {
         SingleOutputStreamOperator<Tuple2<JSONObject, CommonTable>> dimDS = connects.process(
                 new Tablepeocessfcation(tableMapStateDescriptor)
         );
-//        2> ({"op":"u","dic_code":"1103","dic_name":"iiii"},CommonTable(sourceTable=base_dic, sinkTable=dim_base_dic, sinkColumns=dic_code,dic_name, sinkFamily=info, sinkRowKey=dic_code, op=c))
 
         dimDS.print();
         dimDS.addSink(new flinksinkHbase());
