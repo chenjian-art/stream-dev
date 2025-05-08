@@ -1,7 +1,8 @@
-package com.cj.asd.func;
+package com.cj.asd.utils;
 
 
 import com.alibaba.fastjson.JSONObject;
+import com.cj.asd.func.ConfigUtils;
 import org.apache.flink.api.common.serialization.DeserializationSchema;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
 import org.apache.flink.api.common.typeinfo.TypeInformation;

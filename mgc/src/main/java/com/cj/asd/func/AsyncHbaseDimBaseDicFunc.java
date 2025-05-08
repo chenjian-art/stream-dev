@@ -3,6 +3,8 @@ package com.cj.asd.func;
 import avro.shaded.com.google.common.cache.Cache;
 import avro.shaded.com.google.common.cache.CacheBuilder;
 import com.alibaba.fastjson.JSONObject;
+
+import com.cj.asd.utils.HbaseUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.async.ResultFuture;
 import org.apache.flink.streaming.api.functions.async.RichAsyncFunction;
@@ -21,13 +23,12 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
- * @Package com.retailersv1.func.AsyncHbaseDimBaseDicFunc
- * @Author zhou.han
- * @Date 2025/3/15 20:47
- * @description: Async DimBaseDic
+ * @Package com.cj.asd.func.AsyncHbaseDimBaseDicFunc
+ * @Author chen.jian
+ * @Date 2025/5/8 16:30
+ * @description:
  */
 public class AsyncHbaseDimBaseDicFunc extends RichAsyncFunction<JSONObject,JSONObject> {
-
     private transient Connection hbaseConn;
     private transient Table dimTable;
     // 缓存：RowKey -> dic_name

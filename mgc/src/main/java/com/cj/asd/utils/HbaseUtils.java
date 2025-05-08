@@ -1,4 +1,4 @@
-package com.cj.asd.func;
+package com.cj.asd.utils;
 
 import com.alibaba.fastjson.JSONObject;
 import lombok.SneakyThrows;
@@ -20,10 +20,10 @@ import java.util.Iterator;
 import java.util.Map;
 
 /**
- * @author han.zhou
- * @time: 2021/10/14 11:39
- * @className: HBaseUtils
- * @description HBase 工具类
+ * @Package com.cj.asd.utils.HbaseUtils
+ * @Author chen.jian
+ * @Date 2025/5/8 16:35
+ * @description:
  */
 public class HbaseUtils {
     private Connection connection;
@@ -211,6 +211,6 @@ public class HbaseUtils {
         HbaseUtils hbaseUtils = new HbaseUtils("cdh01,cdh02,cdh03");
 //        hbaseUtils.dropHbaseNameSpace("realtime_v2");
 //        System.err.println(hbaseUtils.tableIsExists("realtime_v2:dim_user_info"));
-        hbaseUtils.getHbaseNameSpaceAllTablesList("realtime_v2");
+        hbaseUtils.getHbaseNameSpaceAllTablesList("gmall_config");
     }
 }
