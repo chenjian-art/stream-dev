@@ -30,8 +30,8 @@ public class Flink_Cdc {
                 .hostname("cdh03")
                 .port(3306)
                 .debeziumProperties(properties)
-                .startupOptions(StartupOptions.initial()) // 从最早位点启动
-//                .startupOptions(StartupOptions.latest()) // 从最晚位点启动
+//                .startupOptions(StartupOptions.initial()) // 从最早位点启动
+                .startupOptions(StartupOptions.latest()) // 从最晚位点启动
                 .databaseList("gmall_config") // 设置捕获的数据库， 如果需要同步整个数据库，请将 tableList 设置为 ".*".
                 .tableList("gmall_config.*") // 设置捕获的表
                 .username("root")

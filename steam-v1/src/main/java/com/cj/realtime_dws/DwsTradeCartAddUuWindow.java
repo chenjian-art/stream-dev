@@ -81,7 +81,7 @@ public class DwsTradeCartAddUuWindow {
         KeyedStream<JSONObject, String> keyiby = withWatermarkDS.keyBy(o -> o.getString("user_id"));
 
 
-        //状态编程  判断是否是加购独立用户
+        //状态编程，最后一次加购操作的日期  判断是否是加购独立用户
         SingleOutputStreamOperator<JSONObject> process = keyiby.process(
             new KeyedProcessFunction<String, JSONObject, JSONObject>() {
                 private ValueState<String> lastCartDateState;
@@ -108,7 +108,7 @@ public class DwsTradeCartAddUuWindow {
             }
         );
 
-
+//        水位线
         SingleOutputStreamOperator<JSONObject> ts = process.assignTimestampsAndWatermarks(
                 WatermarkStrategy.<JSONObject>forMonotonousTimestamps()
                         .withTimestampAssigner(new SerializableTimestampAssigner<JSONObject>() {
@@ -164,7 +164,7 @@ public class DwsTradeCartAddUuWindow {
                 return JSON.toJSONString(cartADDUU);
             }
         });
-//        map1.print();
+
 
 
         map1.sinkTo(finksink.getDorisSink("dws_trade_cart_add_uu_window"));

@@ -35,8 +35,7 @@ import com.cj.utils.finksink;
  * @Date 2025/4/10 上午11:44
  * @description: 日志分流
  */
-//数据已经跑了
-//15号
+
 public class DwdBaseLog {
     public static void main(String[] args) throws Exception {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
@@ -51,8 +50,9 @@ public class DwdBaseLog {
                 .build();
 
         DataStreamSource<String> kafkaStrDS = env.fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source");
-
+//        测流
         OutputTag<String> dirtyTag = new OutputTag<String>("dirtyTag"){};
+//        ETL
         SingleOutputStreamOperator<JSONObject> jsonObjDS = kafkaStrDS.process(
                 new ProcessFunction<String, JSONObject>() {
                     @Override
@@ -70,7 +70,7 @@ public class DwdBaseLog {
         SideOutputDataStream<String> dirtyDS = jsonObjDS.getSideOutput(dirtyTag);
 //        dirtyDS.print("脏数据:");
 
-
+//        脏数据写到kafka主题中
         KafkaSink<String> kafkaSink = KafkaSink.<String>builder()
                 .setBootstrapServers("cdh02:9092")
                 .setRecordSerializer(KafkaRecordSerializationSchema.builder()
@@ -82,7 +82,7 @@ public class DwdBaseLog {
                 .build();
 
         dirtyDS.sinkTo(kafkaSink);
-        //新老访客处理
+//        新老访客处理
         KeyedStream<JSONObject, String> jsonObjectStringKeyedStream = jsonObjDS.keyBy(o -> o.getJSONObject("common").getString("mid"));
         SingleOutputStreamOperator<JSONObject> RepairDs = jsonObjectStringKeyedStream.map(new RichMapFunction<JSONObject, JSONObject>() {
             private ValueState<String> lastVisitDateState;
@@ -135,6 +135,7 @@ public class DwdBaseLog {
             }
         });
 //        RepairDs.print("===============>修复后");
+//        日志信息测流
         OutputTag<String> errTag = new OutputTag<String>("errTag") {};
         OutputTag<String> startTag = new OutputTag<String>("startTag") {};
         OutputTag<String> displayTag = new OutputTag<String>("displayTag") {};
@@ -213,6 +214,7 @@ public class DwdBaseLog {
         startDS.print("启动:");
         displayDS.print("曝光:");
         actionDS.print("动作:");
+//        存放kafka
         errDS.sinkTo(finksink.getkafkasink(constat.TOPIC_DWD_TRAFFIC_ERR));
         startDS.sinkTo(finksink.getkafkasink(constat.TOPIC_DWD_TRAFFIC_START));
         displayDS.sinkTo(finksink.getkafkasink(constat.TOPIC_DWD_TRAFFIC_DISPLAY));

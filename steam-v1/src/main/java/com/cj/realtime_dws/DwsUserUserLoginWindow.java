@@ -114,16 +114,16 @@ public class DwsUserUserLoginWindow {
                 Long hl = 0L;
 
 
-//                运用 Flink 状态编程，记录用户末次登录日期。
+//                用户末次登录日期。
                 if (StringUtils.isNotEmpty(uv_state)) {
                     //若状态中的末次登录日期不为 null，进一步判断。
 //如果末次登录日期不等于当天日期则独立用户数 uuCt 记为 1，并将状态中的末次登录日期更新为当日，进一步判断。
                     if (StringUtils.isNotEmpty(s)) {
                         uv = 1L;
                         uvstate.update(s);
-                        //                如果当天日期与末次登录日期之差大于等于8天则回流用户数backCt置为1。
+                        //如果当天日期与末次登录日期之差大于等于8天则回流用户数backCt置为1。
 //                否则 backCt 置为 0。
-//若末次登录日期为当天，则 uuCt 和 backCt 均为 0，此时本条数据不会影响统计结果，舍弃，不再发往下游。
+//若末次登录日期为当天，则 uuCt 和 backCt 均为 0，。
                         Long day = (ts1 - dataformtutil.dateToTs(uv_state)) / 1000 / 60 / 60 / 24;
                         if (day > 8) {
                             hl = 1L;
@@ -186,7 +186,6 @@ public class DwsUserUserLoginWindow {
         );
 
         reduce.print();
-//        3> UserLoginBean(stt=2025-04-16 14:00:00, edt=2025-04-16 17:00:00, curDate=2025-04-16, backCt=1, uuCt=0, ts=1744788137467)
 
         //转成json
         //写入doris
@@ -196,7 +195,7 @@ public class DwsUserUserLoginWindow {
                 return JSON.toJSONString(userLoginBean);
             }
         });
-//        map1.print();
+
 
         map1.sinkTo(finksink.getDorisSink("dws_user_user_login_window"));
     env.execute();

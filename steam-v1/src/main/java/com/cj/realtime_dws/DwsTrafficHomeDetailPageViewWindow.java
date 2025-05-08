@@ -69,9 +69,9 @@ public class DwsTrafficHomeDetailPageViewWindow  {
                 .build();
 
         DataStreamSource<String> kafkaStrDS = env.fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source");
-        //TODO 1.对流中数据类型进行转换   jsonStr->jsonObj
+        //类型进行转换
         SingleOutputStreamOperator<JSONObject> jsonObjDS = kafkaStrDS.map(JSON::parseObject);
-        //TODO 2.过滤首页以及详情页
+        //过滤首页以及详情页
         SingleOutputStreamOperator<JSONObject> filterDS = jsonObjDS.filter(
                 new FilterFunction<JSONObject>() {
                     @Override
@@ -138,7 +138,7 @@ public class DwsTrafficHomeDetailPageViewWindow  {
             }
         });
 //        process.print();
-        //水
+        //水位线
         SingleOutputStreamOperator<TrafficHomeDetailPageViewBean> swx = process.
                 assignTimestampsAndWatermarks(WatermarkStrategy.<TrafficHomeDetailPageViewBean>forBoundedOutOfOrderness(Duration.ofSeconds(3)).withTimestampAssigner(new SerializableTimestampAssigner<TrafficHomeDetailPageViewBean>() {
             @Override
@@ -148,10 +148,10 @@ public class DwsTrafficHomeDetailPageViewWindow  {
         }));
 //        4> TrafficHomeDetailPageViewBean(stt=, edt=, curDate=, homeUvCt=0, goodDetailUvCt=1, ts=1744722384856)
 // 乱序三秒
-////         //TODO 6.开窗
+//        开窗
         AllWindowedStream<TrafficHomeDetailPageViewBean, TimeWindow> windowDS = swx.
                 windowAll(TumblingEventTimeWindows.of(org.apache.flink.streaming.api.windowing.time.Time.seconds(3)));
-// TODO 7.聚合
+//       聚合
         SingleOutputStreamOperator<TrafficHomeDetailPageViewBean> reduceDS = windowDS.reduce(
                 new ReduceFunction<TrafficHomeDetailPageViewBean>() {
                     @Override
@@ -175,9 +175,8 @@ public class DwsTrafficHomeDetailPageViewWindow  {
                     }
                 }
         );
-        //TODO 8.将聚合的结果写到Doris
-//        reduceDS.print();
-//        4> TrafficHomeDetailPageViewBean(stt=2025-04-16 23:11:57, edt=2025-04-16 23:12:00, curDate=2025-04-16, homeUvCt=0, goodDetailUvCt=1, ts=1744816317782)
+                reduceDS.print();
+        //结果写到Doris
 
         SingleOutputStreamOperator<String> map = reduceDS.map(new MapFunction<TrafficHomeDetailPageViewBean, String>() {
             @Override
@@ -185,9 +184,7 @@ public class DwsTrafficHomeDetailPageViewWindow  {
                 return com.alibaba.fastjson2.JSON.toJSONString(trafficHomeDetailPageViewBean);
             }
         });
-        map.print();
-//        1> {"curDate":"2025-04-16","edt":"2025-04-16 23:09:21","goodDetailUvCt":1,"homeUvCt":0,"stt":"2025-04-16 23:09:18"}
-//        Caused by: org.apache.doris.flink.exception.DorisRuntimeException: tabel {} stream load error: realtime_v1.DwsTrafficHomeDetailPageViewWindow, see more in [CANCELLED][DATA_QUALITY_ERROR]Encountered unqualified data, stop processing
+
 
         map.sinkTo(finksink.getDorisSink("dws_traffic_home_detail_page_view_window"));
     env.execute();

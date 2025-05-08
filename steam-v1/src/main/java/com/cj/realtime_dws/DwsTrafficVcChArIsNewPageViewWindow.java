@@ -44,7 +44,7 @@ import com.cj.utils.finksink;
  * @Date 2025/4/14 14:33
  * @description: 按照版本、地区、渠道、新老访客对pv、uv、sv、dur进行聚合统计
  */
-//15号分区和数据
+
 
 public class DwsTrafficVcChArIsNewPageViewWindow  {
     public static  void main(String[] args) throws Exception {
@@ -71,9 +71,11 @@ public class DwsTrafficVcChArIsNewPageViewWindow  {
                 .build();
 
         DataStreamSource<String> kafkaStrDS = env.fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source");
+//        类型转换
         SingleOutputStreamOperator<JSONObject> data_v1 = kafkaStrDS.map(JSON::parseObject);
+//        mid分组
         KeyedStream<JSONObject, String> keyedStream = data_v1.keyBy(o -> o.getJSONObject("common").getString("mid"));
-
+//        判断是否是新用户
         SingleOutputStreamOperator<TrafficPageViewBean> beanDS = keyedStream.map(
                 new RichMapFunction<JSONObject, TrafficPageViewBean>() {
                     private ValueState<String> lastVisitDateState;
@@ -120,7 +122,8 @@ public class DwsTrafficVcChArIsNewPageViewWindow  {
                 }
         );
 //        beanDS.print();
-//        4> TrafficPageViewBean(stt=, edt=, cur_date=, vc=v2.1.134, ch=360, ar=10, isNew=1, uvCt=0, svCt=0, pvCt=1, durSum=18231, ts=1744031377164)
+
+//        水位线
         SingleOutputStreamOperator<TrafficPageViewBean> trafficPageViewBeanSingleOutputStreamOperator = beanDS.assignTimestampsAndWatermarks(
                 WatermarkStrategy.
                         <TrafficPageViewBean>forBoundedOutOfOrderness(Duration.ofSeconds(1))
@@ -133,6 +136,7 @@ public class DwsTrafficVcChArIsNewPageViewWindow  {
                         })
 
         );
+//        维度分组
         KeyedStream<TrafficPageViewBean, org.apache.flink.api.java.tuple.Tuple4<String, String, String, String>> dimKeyedDS = trafficPageViewBeanSingleOutputStreamOperator.keyBy(
                 new KeySelector<TrafficPageViewBean, org.apache.flink.api.java.tuple.Tuple4<String, String, String, String>>() {
                     @Override
@@ -145,11 +149,13 @@ public class DwsTrafficVcChArIsNewPageViewWindow  {
                 }
         );
 //        dimKeyedDS.print();
+//        开窗
         WindowedStream<TrafficPageViewBean, Tuple4<String, String, String, String>, TimeWindow> windowDS
                 = dimKeyedDS.window(TumblingEventTimeWindows.
                 of(org.apache.flink.streaming.api.windowing.time.Time.seconds(10)));
 
 //        3> TrafficPageViewBean(stt=, edt=, cur_date=, vc=v2.1.111, ch=xiaomi, ar=13, isNew=1, uvCt=0, svCt=0, pvCt=1, durSum=13771, ts=1744038466285)
+//        聚合
         SingleOutputStreamOperator<TrafficPageViewBean> result = windowDS
                 // 定义一个时间窗口，这里假设是 5 分钟的滚动窗口，你可以根据实际需求修改
                 .reduce(
@@ -179,7 +185,6 @@ public class DwsTrafficVcChArIsNewPageViewWindow  {
                 );
         result.print();
 
-//        2> TrafficPageViewBean(stt=2025-04-16 23:31:10, edt=2025-04-16 23:31:20, cur_date=2025-04-16, vc=v2.1.134, ch=oppo, ar=11, isNew=1, uvCt=0, svCt=0, pvCt=1, durSum=19526, ts=1744817474280)
 
         SingleOutputStreamOperator<String> map = result
                 .map(new MapFunction<TrafficPageViewBean, String>() {
@@ -189,9 +194,8 @@ public class DwsTrafficVcChArIsNewPageViewWindow  {
                      return JSON.toJSONString(trafficPageViewBean);
                     }
                 });
-
+//        写入doris
         map.sinkTo(finksink.getDorisSink("dws_traffic_vc_ch_ar_is_new_page_view_window"));
-//   map.print();
     env.execute();
     }
 

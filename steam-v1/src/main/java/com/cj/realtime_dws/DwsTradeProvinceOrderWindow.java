@@ -68,7 +68,7 @@ public class DwsTradeProvinceOrderWindow {
                 .build();
 
         DataStreamSource<String> ste = env.fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source");
-        //TODO 1.过滤空消息  并对流中数据进行类型转换    jsonStr->jsonObj
+        //数据类型转换
         SingleOutputStreamOperator<JSONObject> jsonObjDS = ste.process(
                 new ProcessFunction<String, JSONObject>() {
                     @Override
@@ -84,12 +84,12 @@ public class DwsTradeProvinceOrderWindow {
 //        jsonObjDS.print();
 //        2> {"create_time":"1744063561000","sku_num":"2","split_original_amount":"2598.0000","split_coupon_amount":"0.00","sku_id":"6","user_id":"472","province_id":"26","sku_name":"Redmi 10X 4G Helio G85游戏芯 4800万超清四摄 5020mAh大电量 小孔全面屏 128GB大存储 8GB+128GB 冰雾白 游戏智能手机 小米 红米","id":"2259","order_id":"1490","split_activity_amount":"0.00","ts_ms":1744554504399,"split_total_amount":"2598.00"}
 
-//        //TODO 2.按照唯一键(订单明细的id)进行分组
+//        订单明细id进行分组
         KeyedStream<JSONObject, String> orderDetailIdKeyedDS = jsonObjDS.keyBy(jsonObj -> jsonObj.getString("id"));
 //        orderDetailIdKeyedDS.print();
         //        2> {"create_time":"1744063561000","sku_num":"2","split_original_amount":"2598.0000","split_coupon_amount":"0.00","sku_id":"6","user_id":"472","province_id":"26","sku_name":"Redmi 10X 4G Helio G85游戏芯 4800万超清四摄 5020mAh大电量 小孔全面屏 128GB大存储 8GB+128GB 冰雾白 游戏智能手机 小米 红米","id":"2259","order_id":"1490","split_activity_amount":"0.00","ts_ms":1744554504399,"split_total_amount":"2598.00"}
 
-//        //TODO 3.去重
+//        去重
         SingleOutputStreamOperator<JSONObject> distinctDS = orderDetailIdKeyedDS.process(
                 new KeyedProcessFunction<String, JSONObject, JSONObject>() {
                     private ValueState<JSONObject> lastJsonObjState;
@@ -119,7 +119,7 @@ public class DwsTradeProvinceOrderWindow {
 //        distinctDS.print();
 
 
-//        //TODO 4.指定Watermark以及提取事件时间字段
+//        水位线
         SingleOutputStreamOperator<JSONObject> withWatermarkDS = distinctDS.assignTimestampsAndWatermarks(
                 WatermarkStrategy
                         .<JSONObject>forMonotonousTimestamps()
@@ -135,7 +135,7 @@ public class DwsTradeProvinceOrderWindow {
 //        withWatermarkDS.print();
 //        1> {"create_time":"1744406535000","sku_num":"1","split_original_amount":"129.0000","split_coupon_amount":"30.00","sku_id":"26","coupon_id":"1","user_id":"31","province_id":"7","sku_name":"索芙特i-Softto 口红不掉色唇膏保湿滋润 璀璨金钻哑光唇膏 Y01复古红 百搭气质 璀璨金钻哑光唇膏 ","id":"2310","order_id":"1452","split_activity_amount":"0.00","ts_ms":1744554510352,"split_total_amount":"99.00"}
 
-//        //TODO 5.再次对流中数据进行类型转换  jsonObj->统计的实体类对象
+//        转换实体类对象
         SingleOutputStreamOperator<TablepenviceOrderBean> beanDS = withWatermarkDS.map(
                 new MapFunction<JSONObject, TablepenviceOrderBean>() {
                     @Override
@@ -159,15 +159,15 @@ public class DwsTradeProvinceOrderWindow {
                 }
         );
 //        beanDS.print();
-//        //TODO 6.分组
+//        分组
         KeyedStream<TablepenviceOrderBean, String> provinceIdKeyedDS = beanDS.keyBy(TablepenviceOrderBean::getProvinceId);
 //        provinceIdKeyedDS.print();
 //        2> TablepenviceOrderBean(stt=null, edt=null, curDate=null, provinceId=1, provinceName=, orderCount=null, orderAmount=-6029.10, ts=null, orderIdSet=[1716])
 
-//        //TODO 7.开窗
+//        开窗
         WindowedStream<TablepenviceOrderBean, String, TimeWindow> windowDS = provinceIdKeyedDS.window(TumblingEventTimeWindows.of(org.apache.flink.streaming.api.windowing.time.Time.seconds(10)));
 //
-//        //TODO 8.聚合
+//        聚合
         SingleOutputStreamOperator<TablepenviceOrderBean> reduceDS = windowDS.reduce(
                 new ReduceFunction<TablepenviceOrderBean>() {
                     @Override
@@ -195,29 +195,34 @@ public class DwsTradeProvinceOrderWindow {
 
         reduceDS.print();
 
-//        //TODO 9.关联省份维度
+//        关联省份维度
         SingleOutputStreamOperator<TablepenviceOrderBean> map = reduceDS.map(
+
                 new RichMapFunction<TablepenviceOrderBean, TablepenviceOrderBean>() {
-            private Connection hbaseConn;
 
-            @Override
-            public void open(Configuration parameters) throws Exception {
-                hbaseConn = Hbaseutli.getHBaseConnection();
-            }
+                    private Connection hbaseConn;
 
-            @Override
-            public void close() throws Exception {
-                Hbaseutli.closeHBaseConnection(hbaseConn);
-            }
+                    @Override
+                    public void open(Configuration parameters) throws Exception {
+                        hbaseConn = Hbaseutli.getHBaseConnection();
+                    }
 
-            @Override
-            public TablepenviceOrderBean map(TablepenviceOrderBean tablepenviceOrderBean)  {
-                String provinceId = tablepenviceOrderBean.getProvinceId();
-                JSONObject row = Hbaseutli.getRow(hbaseConn, "gmall2025_config", "dim_base_province", provinceId, JSONObject.class);
-                tablepenviceOrderBean.setProvinceName(row.getString("name"));
-                return tablepenviceOrderBean;
-            }
-        });
+                    @Override
+                    public void close() throws Exception {
+                        Hbaseutli.closeHBaseConnection(hbaseConn);
+                    }
+
+                    @Override
+                    public TablepenviceOrderBean map(TablepenviceOrderBean orderBean) throws Exception {
+                        String spuId = orderBean.getProvinceId();
+                        JSONObject skuInfoJsonObj = Hbaseutli.getRow(hbaseConn, constat.HBASE_NAMESPACE, "dim_base_province", spuId, JSONObject.class);
+                        orderBean.setProvinceName(skuInfoJsonObj.getString("name"));
+                        return orderBean;
+                    }
+                }
+        );
+//        map.print();
+
         SingleOutputStreamOperator<String> map1 = map.map(new RichMapFunction<TablepenviceOrderBean, String>() {
             @Override
             public String map(TablepenviceOrderBean tablepenviceOrderBean)   {
@@ -226,7 +231,7 @@ public class DwsTradeProvinceOrderWindow {
         });
 //        map1.print();
 
-        //        //TODO 10.将关联的结果写到Doris中
+//       结果写到Doris中
 
         map1.sinkTo(finksink.getDorisSink("dws_trade_province_order_window"));
     env.execute();

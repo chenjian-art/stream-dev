@@ -35,6 +35,8 @@ public class Dim_App extends BaseApp {
         new Dim_App().start(10001,1,"dim_app",constat.TOPIC_DB);
     }
     public void handle(StreamExecutionEnvironment env, DataStreamSource<String> kafkaStrDS) {
+
+//        类型转换并且做一个ETL
         SingleOutputStreamOperator<JSONObject> kafkaDs = kafkaStrDS.process(new ProcessFunction<String, JSONObject>() {
             @Override
             public void processElement(String s, ProcessFunction<String, JSONObject>.Context context, Collector<JSONObject> collector) throws Exception {
@@ -56,12 +58,12 @@ public class Dim_App extends BaseApp {
             }
         });
 
-        //cdc
+//        读取MySQL配置表的信息
         MySqlSource<String> getmysqlsource = flinksorceutil.getmysqlsource("gmall2025_config", "table_process_dim");
         DataStreamSource<String> mySQL_source = env.fromSource(getmysqlsource, WatermarkStrategy.noWatermarks(), "MySQL Source")
                 .setParallelism(1);// 设置 sink 节点并行度为 1
 
-
+//        类型转换成实体类
         SingleOutputStreamOperator<CommonTable> tpds = mySQL_source.map(new MapFunction<String, CommonTable>() {
             @Override
             public CommonTable map(String s) throws Exception {
@@ -69,8 +71,10 @@ public class Dim_App extends BaseApp {
                 String op = jsonObject.getString("op");
                 CommonTable commonTable = null;
                 if ("d".equals(op)) {
+//                    获取删除前的数据
                     commonTable = jsonObject.getObject("before", CommonTable.class);
                 } else {
+//                    获取删除后的数据
                     commonTable = jsonObject.getObject("after", CommonTable.class);
                 }
                 commonTable.setOp(op);
@@ -78,7 +82,6 @@ public class Dim_App extends BaseApp {
             }
         });
 
-        tpds.print();
         tpds.map(
                 new RichMapFunction<CommonTable, CommonTable>() {
 
@@ -98,36 +101,39 @@ public class Dim_App extends BaseApp {
                     @Override
                     public CommonTable map(CommonTable commonTable) throws Exception {
                         String op = commonTable.getOp();
-                        //获取Hbase中维度表的表名
+                        //获取Hbase中的表名
                         String sinkTable = commonTable.getSinkTable();
-                        //获取在HBase中建表的列族
+                        //获取HBase中的列族
                         String[] sinkFamilies = commonTable.getSinkFamily().split(",");
                         if ("d".equals(op)) {
-                            //从配置表中删除了一条数据  将hbase中对应的表删除掉
+//                            将hbase中对应的表删除掉
                             Hbaseutli.dropHBaseTable(hbaseconn, constat.HBASE_NAMESPACE, sinkTable);
                         } else if ("r".equals(op) || "c".equals(op)) {
-                            //从配置表中读取了一条数据或者向配置表中添加了一条配置   在hbase中执行建表
+//                            向配置表中添加了一条配置   在hbase中执行建表
                             Hbaseutli.createHBaseTable(hbaseconn, constat.HBASE_NAMESPACE, sinkTable, sinkFamilies);
                         }
                         else {
-                            //对配置表中的配置信息进行了修改   先从hbase中将对应的表删除掉，再创建新表
+                            //先删除hbase中将对应的表，再创建新表
                             Hbaseutli.dropHBaseTable(hbaseconn, constat.HBASE_NAMESPACE, sinkTable);
                             Hbaseutli.createHBaseTable(hbaseconn, constat.HBASE_NAMESPACE, sinkTable, sinkFamilies);
                         }
                         return commonTable;
                     }
                 });
+//        tpds.print();
+//        广播---broadcast
         MapStateDescriptor<String, CommonTable> tableMapStateDescriptor = new MapStateDescriptor<>
                 ("maps", String.class, CommonTable.class);
         BroadcastStream<CommonTable> broadcast = tpds.broadcast(tableMapStateDescriptor);
-
+//        主流和和广播流关联---connect
         BroadcastConnectedStream<JSONObject, CommonTable> connects = kafkaDs.connect(broadcast);
-        //处理流合并
+//        判断是否为维度
         SingleOutputStreamOperator<Tuple2<JSONObject, CommonTable>> dimDS = connects.process(
                 new Tablepeocessfcation(tableMapStateDescriptor)
         );
 
         dimDS.print();
+//        写进kafka
         dimDS.addSink(new flinksinkHbase());
 
     }
