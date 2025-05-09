@@ -83,22 +83,21 @@ public class DwdInteractionCommentInfo {
 
 //        将关联的结果写到kafka主题中
         tenv.executeSql("CREATE TABLE dwd_interaction_comment_info (\n" +
-                "    id string,\n" +
-                "    user_id string,\n" +
-                "    sku_id string,\n" +
-                "    appraise string,\n" +
-                "    appraise_name string,\n" +
-                "    comment_txt string,\n" +
-                "    ts bigint,\n" +
-                "    PRIMARY KEY (id) NOT ENFORCED\n" +
-                ") " +
-                " WITH (\n" +
+                "  id STRING,\n" +
+                "  user_id STRING,\n" +
+                "  sku_id STRING,\n" +
+                "  appraise STRING,\n" +
+                "  appraise_name STRING,\n" +
+                "  comment_txt STRING,\n" +
+                "  ts bigint,\n" +
+                "  PRIMARY KEY (id) NOT ENFORCED\n" +
+                ") WITH (\n" +
                 "  'connector' = 'upsert-kafka',\n" +
                 "  'topic' = 'dwd_interaction_comment_info',\n" +
                 "  'properties.bootstrap.servers' = 'cdh02:9092',\n" +
                 "  'key.format' = 'json',\n" +
                 "  'value.format' = 'json'\n" +
-                ")");
+                ");");
         table3.executeInsert("dwd_interaction_comment_info");
 
         env.execute();

@@ -20,100 +20,116 @@ import java.util.*;
  * @Date 2025/4/13 20:21
  * @description: 事实表动态分流---处理关联后的数据
  */
-public class BaseDbTableProcessFunction extends BroadcastProcessFunction<JSONObject, TableProcessDwd, Tuple2<JSONObject, TableProcessDwd>> {
+public class BaseDbTableProcessFunction extends BroadcastProcessFunction<JSONObject, JSONObject, Tuple2<JSONObject, JSONObject>> {
 
-    private MapStateDescriptor<String, TableProcessDwd> mapStateDescriptor;
+    private MapStateDescriptor<String, JSONObject> mapStateDescriptor;
 
-    private Map<String, TableProcessDwd> configMap = new HashMap<>();
+    private Map<String, JSONObject> configMap = new HashMap<>();
 
-    public BaseDbTableProcessFunction(MapStateDescriptor<String, TableProcessDwd> mapStateDescriptor) {
+    public BaseDbTableProcessFunction(MapStateDescriptor<String, JSONObject> mapStateDescriptor) {
         this.mapStateDescriptor = mapStateDescriptor;
     }
-
     @Override
     public void open(Configuration parameters) throws Exception {
         //将配置信息预加载到程序中
         Connection mySQLConnection = JdbsUtils.getMySQLConnection();
-        List<TableProcessDwd> tableProcessDwdList
-                = JdbsUtils.queryList(mySQLConnection, "select * from gmall2025_config.table_process_dwd", TableProcessDwd.class, true);
-        for (TableProcessDwd tableProcessDwd : tableProcessDwdList) {
-            String sourceTable = tableProcessDwd.getSourceTable();
-            String sourceType = tableProcessDwd.getSourceType();
+        List<JSONObject> JSONObjectList
+                = JdbsUtils.queryList(mySQLConnection, "select * from gmall2025_config.table_process_dwd", JSONObject.class, true);
+        for (JSONObject JSONObject : JSONObjectList) {
+            String sourceTable = JSONObject.getString("sourceTable");
+            String sourceType = JSONObject.getString("sourceType");
+            if ("insert".equals(sourceType) || "update".equals(sourceType)){
+                sourceType = "c";
+            }else if("delete".equals(sourceType)){
+                sourceType = "d";
+            }else {
+                sourceType = "u";
+            }
+
             String key = getKey(sourceTable, sourceType);
-            configMap.put(key, tableProcessDwd);
+            configMap.put(key, JSONObject);
+
+
         }
         JdbsUtils.closeMySQLConnection(mySQLConnection);
     }
-
-    private String getKey(String sourceTable, String sourceType) {
-        String key = sourceTable + ":" + sourceType;
-        return key;
-    }
-
-    //处理主流业务数据
     @Override
-    public void processElement(JSONObject jsonObj, BroadcastProcessFunction<JSONObject, TableProcessDwd, Tuple2<JSONObject, TableProcessDwd>>.ReadOnlyContext ctx, Collector<Tuple2<JSONObject, TableProcessDwd>> out) throws Exception {
-        //{"table":"xxx","type":"update","ts":1710075970,"data":{"id":1,"tm_name":"Redmi","logo_url":"abc","create_time":"2021-12-14 00:00:00","operate_time":null},"old":{"tm_name":"Redmi111"}}
-        //获取处理的业务数据库表的表名
+    public void processElement(JSONObject jsonObj, BroadcastProcessFunction<JSONObject, JSONObject, Tuple2<JSONObject, JSONObject>>.ReadOnlyContext readOnlyContext, Collector<Tuple2<JSONObject, JSONObject>> out) throws Exception {
+
+        //主流 获取广播状态
+        ReadOnlyBroadcastState<String, JSONObject> state = readOnlyContext.getBroadcastState(mapStateDescriptor);
+
+        //获取主流内的table表名
         String table = jsonObj.getJSONObject("source").getString("table");
         //获取操作类型
-        String type = jsonObj.getString("op");
+        String op = jsonObj.getString("op");
         //拼接key
-        String key = getKey(table, type);
-        //获取广播状态
-        ReadOnlyBroadcastState<String, TableProcessDwd> broadcastState = ctx.getBroadcastState(mapStateDescriptor);
-        //根据key到广播状态以及configMap中获取对应的配置信息
-        TableProcessDwd tp = null;
+        String key = getKey(table, op);
 
-        if((tp = broadcastState.get(key)) != null
-                ||(tp = configMap.get(key)) != null){
-            //说明当前数据，是需要动态分流处理的事实表数据，将data部分传递到下游
+        //根据表名先到广播状态中获取对应的配置信息，如果没有找到对应的配置，再尝试到configMap中获取
+        JSONObject tableProcessDim = null;
+
+//                for (Map.Entry<String, JSONObject> entry : state.immutableEntries()) {
+//                    String key1 = entry.getKey();
+//                    JSONObject value1 = entry.getValue();
+//                    System.out.println("Key: " + key1 + ", Value: " + value1);
+//                }
+
+        if ((tableProcessDim = state.get(key)) != null
+                ||(tableProcessDim = configMap.get(key)) != null) {
+
+            // 将维度数据继续向下游传递(只需要传递data属性内容即可)
             JSONObject dataJsonObj = jsonObj.getJSONObject("after");
-            //在向下游传递数据前，过滤掉不需要传递的字段
-            String sinkColumns = tp.getSinkColumns();
-            deleteNotNeedColumns(dataJsonObj,sinkColumns);
+
+            //在向下游传递数据前，过滤掉不需要传递的属性
+            String sinkColumns = tableProcessDim.getString("sink_columns");
+            deleteNotNeedColumns(dataJsonObj, sinkColumns);
+
             //在向下游传递数据前， 将ts事件时间补充到data对象上
-            Long ts = jsonObj.getLong("ts_ms");
-            dataJsonObj.put("ts_ms",ts);
-            out.collect(Tuple2.of(dataJsonObj,tp));
+            Long ts_ms = jsonObj.getLong("ts_ms");
+            dataJsonObj.put("ts_ms", ts_ms);
+
+            out.collect(Tuple2.of(dataJsonObj, tableProcessDim));
         }
     }
 
-    //处理广播流配置数据
     @Override
-    public void processBroadcastElement(TableProcessDwd tp, BroadcastProcessFunction<JSONObject, TableProcessDwd, Tuple2<JSONObject, TableProcessDwd>>.Context ctx, Collector<Tuple2<JSONObject, TableProcessDwd>> out) throws Exception {
-        //获取对配置表进行的操作的类型
-        String op = tp.getOp();
-        //获取广播状态
-        BroadcastState<String, TableProcessDwd> broadcastState = ctx.getBroadcastState(mapStateDescriptor);
-        //获取业务数据库的表的表名
-        String sourceTable = tp.getSourceTable();
-        //获取业务数据库的表对应的操作类型
-        String sourceType = tp.getSourceType();
-        //拼接key
-        String key = getKey(sourceTable, sourceType);
+    public void processBroadcastElement(JSONObject tp, BroadcastProcessFunction<JSONObject, JSONObject, Tuple2<JSONObject, JSONObject>>.Context context, Collector<Tuple2<JSONObject, JSONObject>> collector) throws Exception {
+        //广播流
+        //获取 op 操作状态
+        String op = tp.getString("op");
+        //获取 要写入状态算子的 数据
+        String sourceTable = tp.getString("source_table");
+        //获取 状态算子
+        BroadcastState<String, JSONObject> state = context.getBroadcastState(mapStateDescriptor);
 
-        if("d".equals(op)){
-            //从配置表中删除了一条数据，那么需要将广播状态以及configMap中对应的配置也删除掉
-            broadcastState.remove(key);
+        //获取业务数据库的表对应的操作类型
+        String sourceType = tp.getString("source_type");
+        //拼接key
+        String key = getKey(sourceTable, op);
+        //判断 是否是删除操作
+        if ("d".equals(op)) {
+            //删除 状态算子 里对应的key的数据
+            state.remove(sourceTable);
             configMap.remove(key);
-        }else{
+        } else {
             //从配置表中读取数据或者添加、更新了数据  需要将最新的这条配置信息放到广播状态以及configMap中
-            broadcastState.put(key,tp);
+            state.put(key, tp);
             configMap.put(key,tp);
         }
     }
-
-    //过滤掉不需要传递的字段
-    //dataJsonObj  {"tm_name":"Redmi","create_time":"2021-12-14 00:00:00","logo_url":"555","id":1}
-    //sinkColumns  id,tm_name
+    private static String getKey(String sourceTable, String sourceType) {
+        String key = sourceTable + ":" + sourceType;
+        return key;
+    }
     private static void deleteNotNeedColumns(JSONObject dataJsonObj, String sinkColumns) {
-        List<String> columnList = Arrays.asList(sinkColumns.split(","));
+        if(sinkColumns!=null){
+            List<String> columnList = Arrays.asList(sinkColumns.split(","));
 
-        Set<Map.Entry<String, Object>> entrySet = dataJsonObj.entrySet();
+            Set<Map.Entry<String, Object>> entrySet = dataJsonObj.entrySet();
 
-        entrySet.removeIf(entry-> !columnList.contains(entry.getKey()));
+            entrySet.removeIf(entry-> !columnList.contains(entry.getKey()));
+        }
 
     }
 }
-
