@@ -64,6 +64,8 @@ public class bbb {
                 .uid("MapCheckRedisSensitiveWord")
                 .name("MapCheckRedisSensitiveWord");
 
+
+
         SingleOutputStreamOperator<JSONObject> secondCheckMap = SensitiveWordsDs.map(new RichMapFunction<JSONObject, JSONObject>() {
             @Override
             public JSONObject map(JSONObject jsonObject) {

@@ -42,7 +42,7 @@ public class aaa {
 
         SingleOutputStreamOperator<String> kafkaCdcDbSource = env.fromSource(
                 KafkaUtils.buildKafkaSecureSource(
-                        "cdh01:9092",
+                        "cdh02:9092",
                         "topic_db",
                         new Date().toString(),
                         OffsetsInitializer.earliest()
@@ -63,20 +63,20 @@ public class aaa {
                         ),
                 "kafka_cdc_db_source"
         ).uid("kafka_cdc_db_source").name("kafka_cdc_db_source");
-
+//        kafkaCdcDbSource.print();
 
         DataStream<JSONObject> filteredOrderInfoStream = kafkaCdcDbSource
                 .map(JSON::parseObject)
                 .filter(json -> json.getJSONObject("source").getString("table").equals("order_info"))
                 .uid("kafka_cdc_db_order_source").name("kafka_cdc_db_order_source");
-
+//        filteredOrderInfoStream.print();
 
         DataStream<JSONObject> filteredStream = kafkaCdcDbSource
                 .map(JSON::parseObject)
                 .filter(json -> json.getJSONObject("source").getString("table").equals("comment_info"))
                 .keyBy(json -> json.getJSONObject("after").getString("appraise"));
 
-
+//        filteredStream.print();
 
 
         SingleOutputStreamOperator<JSONObject> enrichedStream = filteredStream.map(new RichMapFunction<JSONObject, JSONObject>() {
@@ -106,6 +106,7 @@ public class aaa {
             }
         });
 
+        enrichedStream.print();
 
         SingleOutputStreamOperator<JSONObject> orderCommentMap = enrichedStream.map(new RichMapFunction<JSONObject, JSONObject>() {
             @Override
@@ -138,7 +139,7 @@ public class aaa {
                 return null;
             }
         });
-
+        orderCommentMap.print();
 
         SingleOutputStreamOperator<JSONObject> orderInfoMapDs = filteredOrderInfoStream.map(new RichMapFunction<JSONObject, JSONObject>() {
             @Override
@@ -158,7 +159,7 @@ public class aaa {
                 return resultObj;
             }
         }).uid("map-order_info_data").name("map-order_info_data");
-
+        orderInfoMapDs.print();
 
         KeyedStream<JSONObject, String> keyedOrderCommentStream = orderCommentMap.keyBy(data -> data.getString("order_id"));
         KeyedStream<JSONObject, String> keyedOrderInfoStream = orderInfoMapDs.keyBy(data -> data.getString("id"));
@@ -168,8 +169,7 @@ public class aaa {
                 .between(Time.minutes(-1), Time.minutes(1))
                 .process(new IntervalJoinOrderCommentAndOrderInfoFunc())
                 .uid("interval_join_order_comment_and_order_info_func").name("interval_join_order_comment_and_order_info_func");
-
-
+        orderMsgAllDs.print();
 
         SingleOutputStreamOperator<JSONObject> supplementDataMap = orderMsgAllDs.map(new RichMapFunction<JSONObject, JSONObject>() {
             @Override
@@ -178,7 +178,7 @@ public class aaa {
                 return jsonObject;
             }
         }).uid("map-generate_comment").name("map-generate_comment");
-
+        supplementDataMap.print();
 
 
         SingleOutputStreamOperator<JSONObject> suppleMapDs = supplementDataMap.map(new RichMapFunction<JSONObject, JSONObject>() {
@@ -198,6 +198,7 @@ public class aaa {
                 return jsonObject;
             }
         }).uid("map-sensitive-words").name("map-sensitive-words");
+        suppleMapDs.print();
 
 
         SingleOutputStreamOperator<JSONObject> suppleTimeFieldDs = suppleMapDs.map(new RichMapFunction<JSONObject, JSONObject>() {
@@ -207,8 +208,9 @@ public class aaa {
                 return jsonObject;
             }
         }).uid("add json ds").name("add json ds");
-
         suppleTimeFieldDs.print();
+
+
 
         suppleTimeFieldDs.map(js -> js.toJSONString())
                 .sinkTo(
