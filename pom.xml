@@ -10,6 +10,8 @@
     <packaging>pom</packaging>
     <modules>
         <module>mgc</module>
+        <module>stream-morgan</module>
+        <module>stream-morgan</module>
     </modules>
 
     <properties>

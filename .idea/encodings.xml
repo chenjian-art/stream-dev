@@ -5,5 +5,9 @@
     <file url="file://$PROJECT_DIR$/mgc/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/stream-morgan/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/stream-morgan/src/main/resources" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/stream-word/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/stream-word/src/main/resources" charset="UTF-8" />
   </component>
 </project>
