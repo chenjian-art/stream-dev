@@ -4,6 +4,7 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.cj.util.dataformtutil;
+import com.cj.util.flinksink;
 import lombok.SneakyThrows;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
@@ -186,11 +187,11 @@ public class dwdlog {
         displayDS.print("曝光:");
         actionDS.print("动作:");
 //        存放kafka
-//        errDS.sinkTo(flinksink.getkafkasink("dwd_err"));
-//        startDS.sinkTo(flinksink.getkafkasink("dwd_start"));
-//        displayDS.sinkTo(flinksink.getkafkasink("dwd_display"));
-//        actionDS.sinkTo(flinksink.getkafkasink("dwd_action"));
-//        pageDS.sinkTo(flinksink.getkafkasink("dwd_page"));
+        errDS.sinkTo(flinksink.getkafkasink("dwd_err"));
+        startDS.sinkTo(flinksink.getkafkasink("dwd_start"));
+        displayDS.sinkTo(flinksink.getkafkasink("dwd_display"));
+        actionDS.sinkTo(flinksink.getkafkasink("dwd_action"));
+        pageDS.sinkTo(flinksink.getkafkasink("dwd_page"));
 
 
         env.execute();

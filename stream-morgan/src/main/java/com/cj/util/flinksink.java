@@ -27,7 +27,7 @@ public class flinksink {
     public static KafkaSink<String> getkafkasink(String topic) {
 
         KafkaSink<String> sink = KafkaSink.<String>builder()
-                .setBootstrapServers("cdh02:9090")
+                .setBootstrapServers("cdh02:9092")
                 .setRecordSerializer(KafkaRecordSerializationSchema.builder()
                         .setTopic(topic)
                         .setValueSerializationSchema(new SimpleStringSchema())

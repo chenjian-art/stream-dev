@@ -47,6 +47,7 @@ public class flinkcdc {
         DataStreamSource<String> mySQLSource = env
                 .fromSource(mySqlSource, WatermarkStrategy.noWatermarks(), "MySQL Source");
 
+
         mySQLSource.print();
 
         KafkaSink<String> sink = KafkaSink.<String>builder()
