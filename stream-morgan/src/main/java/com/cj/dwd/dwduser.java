@@ -2,23 +2,31 @@ package com.cj.dwd;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
+import com.cj.asd.func.ConfigUtils;
+import com.cj.bean.DimBaseCategory;
+import com.cj.func.MapDeviceAndSearchMarkModelFunc;
+import com.cj.func.ProcessFilterRepeatTsDataFunc;
 import com.cj.func.processfilter;
+import com.cj.util.JdbcUtils;
+import com.cj.util.flinksink;
 import lombok.SneakyThrows;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
-import org.apache.flink.api.java.operators.translation.KeyRemovingMapper;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.streaming.api.datastream.*;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.streaming.api.functions.co.ProcessJoinFunction;
+import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.util.Collector;
 
+import java.sql.Connection;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 /**
  * @Package com.cj.dwd.dwduser
@@ -27,6 +35,34 @@ import java.time.format.DateTimeFormatter;
  * @description:
  */
 public class dwduser {
+    private static final List<DimBaseCategory> dim_base_categories;
+    private static final Connection connection;
+    private static final double device_rate_weight_coefficient = 0.1;
+    private static final double search_rate_weight_coefficient = 0.15;
+
+    static {
+        try {
+            connection = JdbcUtils.getMySQLConnection(
+                    "jdbc:mysql://cdh03:3306/gmall_config?useSSL=false",
+                    "root",
+                    "root");
+            String sql = "select b3.id,                          \n" +
+                    "            b3.name as b3name,              \n" +
+                    "            b2.name as b2name,              \n" +
+                    "            b1.name as b1name               \n" +
+                    "     from gmall_config.base_category3 as b3  \n" +
+                    "     join gmall_config.base_category2 as b2  \n" +
+                    "     on b3.category2_id = b2.id             \n" +
+                    "     join gmall_config.base_category1 as b1  \n" +
+                    "     on b2.category1_id = b1.id";
+            dim_base_categories = JdbcUtils.queryList2(connection, sql, DimBaseCategory.class, false);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+    }
+
+
     @SneakyThrows
     public static void main(String[] args) {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
@@ -53,17 +89,6 @@ public class dwduser {
                 if (epochDay != null) {
                     LocalDate date = LocalDate.ofEpochDay(epochDay);
                     after.put("birthday", date.format(DateTimeFormatter.ISO_DATE));
-
-                    String zodiacSign = getZodiacSign(date);
-                    after.put("zodiac_sign", zodiacSign);
-                    int year = date.getYear();
-                    int decade = (year / 10) * 10; // 计算年代（如1990, 2000）
-                    after.put("decade", decade);
-
-                    LocalDate currentDate = LocalDate.now();
-                    int age = calculateAge(date, currentDate);
-                    after.put("age", age);
-
                 }
             }
             return json;
@@ -73,37 +98,36 @@ public class dwduser {
         SingleOutputStreamOperator<JSONObject> userK = user.map(new RichMapFunction<JSONObject, JSONObject>() {
             @Override
             public JSONObject map(JSONObject jsonObject) throws Exception {
-                JSONObject object = new JSONObject();
-                if (jsonObject.containsKey("after") && jsonObject.getJSONObject("after") != null){
+                JSONObject result = new JSONObject();
+                if (jsonObject.containsKey("after") && jsonObject.getJSONObject("after") != null) {
                     JSONObject after = jsonObject.getJSONObject("after");
-                    String birthday = after.getString("birthday");
-
-                    String name = after.getString("name");
-                    String zodiacSign = after.getString("zodiac_sign");
-                    Integer id = after.getInteger("id");
-                    Integer birthDecade = after.getInteger("decade");
-                    String login_name = after.getString("login_name");
-                    String userLevel = after.getString("user_level");
-                    String phoneNum = after.getString("phone_num");
-                    String email = after.getString("email");
-                    Long tsMs = jsonObject.getLong("ts_ms");
-                    Integer age = after.getInteger("age");
-
-                    object.put("birthday", birthday);
-                    object.put("decade", birthDecade);
-                    object.put("name", name);
-                    object.put("zodiac_sign", zodiacSign);
-                    object.put("id", id);
-                    object.put("login_name", login_name);
-                    object.put("user_level", userLevel);
-                    object.put("phone_num", phoneNum);
-                    object.put("gender", after.getString("gender") != null ? after.getString("gender") : "home");
-                    object.put("email", email);
-                    object.put("ts_ms",tsMs);
-                    object.put("age", age);
+                    result.put("uid", after.getString("id"));
+                    result.put("uname", after.getString("name"));
+                    result.put("user_level", after.getString("user_level"));
+                    result.put("login_name", after.getString("login_name"));
+                    result.put("phone_num", after.getString("phone_num"));
+                    result.put("email", after.getString("email"));
+                    result.put("gender", after.getString("gender") != null ? after.getString("gender") : "home");
+                    result.put("birthday", after.getString("birthday"));
+                    result.put("ts_ms", jsonObject.getLongValue("ts_ms"));
+                    String birthdayStr = after.getString("birthday");
+                    if (birthdayStr != null && !birthdayStr.isEmpty()) {
+                        try {
+                            LocalDate birthday = LocalDate.parse(birthdayStr, DateTimeFormatter.ISO_DATE);
+                            LocalDate currentDate = LocalDate.now(ZoneId.of("Asia/Shanghai"));
+                            int age = calculateAge(birthday, currentDate);
+                            int decade = birthday.getYear() / 10 * 10;
+                            result.put("decade", decade);
+                            result.put("age", age);
+                            String zodiac = getZodiacSign(birthday);
+                            result.put("zodiac_sign", zodiac);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
                 }
 
-                return object;
+                return result;
             }
         });
 
@@ -113,44 +137,50 @@ public class dwduser {
         SingleOutputStreamOperator<JSONObject> supK = sup.map(new RichMapFunction<JSONObject, JSONObject>() {
             @Override
             public JSONObject map(JSONObject jsonObject) throws Exception {
-                JSONObject object = new JSONObject();
-                if (jsonObject.containsKey("after") && jsonObject.getJSONObject("after") != null){
+                JSONObject result = new JSONObject();
+                if (jsonObject.containsKey("after") && jsonObject.getJSONObject("after") != null) {
                     JSONObject after = jsonObject.getJSONObject("after");
-                    Integer uid = after.getInteger("uid");
-                    String height = after.getString("height");
-                    String weight = after.getString("weight");
-                    String unitWeight = after.getString("unit_weight");
-                    String unitHeight = after.getString("unit_height");
-                    object.put("uid", uid);
-                    object.put("height", height);
-                    object.put("weight", weight);
-                    object.put("unit_weight", unitWeight);
-                    object.put("unit_height", unitHeight);
+                    result.put("uid", after.getString("uid"));
+                    result.put("unit_height", after.getString("unit_height"));
+                    result.put("create_ts", after.getLong("create_ts"));
+                    result.put("weight", after.getString("weight"));
+                    result.put("unit_weight", after.getString("unit_weight"));
+                    result.put("height", after.getString("height"));
+                    result.put("ts_ms", jsonObject.getLong("ts_ms"));
                 }
-                return object;
+                return result;
             }
         });
 
+        SingleOutputStreamOperator<JSONObject> finalUserinfoDs = userK.filter(data -> data.containsKey("uid") && !data.getString("uid").isEmpty());
+        SingleOutputStreamOperator<JSONObject> finalUserinfoSupDs = supK.filter(data -> data.containsKey("uid") && !data.getString("uid").isEmpty());
+
+        KeyedStream<JSONObject, String> keyedStreamUserInfoDs = finalUserinfoDs.keyBy(data -> data.getString("uid"));
+        KeyedStream<JSONObject, String> keyedStreamUserInfoSupDs = finalUserinfoSupDs.keyBy(data -> data.getString("uid"));
 
 
-        SingleOutputStreamOperator<JSONObject> ds3 = userK.keyBy(o -> o.getInteger("id"))
-                .intervalJoin(supK.keyBy(o -> o.getInteger("uid")))
-                .between(Time.seconds(-60), Time.seconds(60))
+        SingleOutputStreamOperator<JSONObject> ds3 = keyedStreamUserInfoDs.intervalJoin(keyedStreamUserInfoSupDs)
+                .between(Time.minutes(-5), Time.minutes(5))
                 .process(new ProcessJoinFunction<JSONObject, JSONObject, JSONObject>() {
                     @Override
-                    public void processElement(JSONObject jsonObject, JSONObject jsonObject2, ProcessJoinFunction<JSONObject, JSONObject, JSONObject>.Context context, Collector<JSONObject> collector) throws Exception {
+                    public void processElement(JSONObject jsonObject1, JSONObject jsonObject2, ProcessJoinFunction<JSONObject, JSONObject, JSONObject>.Context context, Collector<JSONObject> collector) throws Exception {
                         JSONObject result = new JSONObject();
-                        if (jsonObject.getString("id").equals(jsonObject2.getString("uid"))){
-                            result.putAll(jsonObject);
-                            result.put("height",jsonObject2.getString("height"));
-                            result.put("unit_height",jsonObject2.getString("unit_height"));
-                            result.put("weight",jsonObject2.getString("weight"));
-                            result.put("unit_weight",jsonObject2.getString("unit_weight"));
+                        if (jsonObject1.getString("uid").equals(jsonObject2.getString("uid"))) {
+                            result.putAll(jsonObject1);
+                            result.put("height", jsonObject2.getString("height"));
+                            result.put("unit_height", jsonObject2.getString("unit_height"));
+                            result.put("weight", jsonObject2.getString("weight"));
+                            result.put("unit_weight", jsonObject2.getString("unit_weight"));
                         }
                         collector.collect(result);
                     }
                 });
 
+        ds3.print();
+//        ds3.map(o -> JSON.toJSONString(o)).sinkTo(flinksink.getkafkasink("dwd_user_log"));
+
+
+//      page日志信息
         KafkaSource<String> source1 = KafkaSource.<String>builder()
                 .setBootstrapServers("cdh02:9092")
                 .setTopics("dwd_page")
@@ -166,36 +196,48 @@ public class dwduser {
         SingleOutputStreamOperator<JSONObject> pagelog = logJson.map(new RichMapFunction<JSONObject, JSONObject>() {
             @Override
             public JSONObject map(JSONObject jsonObject) throws Exception {
-                JSONObject object = new JSONObject();
-                if (jsonObject.containsKey("common")) {
+                JSONObject result = new JSONObject();
+                if (jsonObject.containsKey("common")){
                     JSONObject common = jsonObject.getJSONObject("common");
-                    object.put("uid", common.getInteger("uid") != null ? common.getInteger("uid") : "-1");
-                    object.put("ts", jsonObject.getLong("ts"));
-                    JSONObject object1 = new JSONObject();
+                    result.put("uid",common.getString("uid") != null ? common.getString("uid") : "-1");
+                    result.put("ts",jsonObject.getLongValue("ts"));
+                    JSONObject deviceInfo = new JSONObject();
                     common.remove("sid");
-                    common.remove("is_new");
                     common.remove("mid");
-                    object1.putAll(common);
-                    object.put("deviceInfo",object1);
-                    if (jsonObject.containsKey("page") && !jsonObject.getJSONObject("page").isEmpty()){
-                        JSONObject page = jsonObject.getJSONObject("page");
-                        if (page.containsKey("item_type") && page.getString("item_type").equals("keyword")){
-                            object.put("search_item",page.getString("item"));
+                    common.remove("is_new");
+                    deviceInfo.putAll(common);
+                    result.put("deviceInfo",deviceInfo);
+                    if(jsonObject.containsKey("page") && !jsonObject.getJSONObject("page").isEmpty()){
+                        JSONObject pageInfo = jsonObject.getJSONObject("page");
+                        if (pageInfo.containsKey("item_type") && pageInfo.getString("item_type").equals("keyword")){
+                            String item = pageInfo.getString("item");
+                            result.put("search_item",item);
                         }
                     }
                 }
-
-                JSONObject source2 = object.getJSONObject("deviceInfo");
-                String s = source2.getString("os").split(" ")[0];
-                source2.put("os",s);
-                return object;
+                JSONObject deviceInfo = result.getJSONObject("deviceInfo");
+                String os = deviceInfo.getString("os").split(" ")[0];
+                deviceInfo.put("os",os);
+                return result;
             }
         });
+//        pagelog.print();
+        SingleOutputStreamOperator<JSONObject> filtered = pagelog.filter(o -> !o.getString("uid").isEmpty());
+//        filtered.print();
+        KeyedStream<JSONObject, String> keyedSteamLogPage = filtered.keyBy(o -> o.getString("uid"));
+//        keyedSteamLogPage.print();
+        SingleOutputStreamOperator<JSONObject> processStagePageLogDs = keyedSteamLogPage.process(new ProcessFilterRepeatTsDataFunc());
+//        processStagePageLogDs.print();
 
-        KeyedStream<JSONObject, Integer> pageUid = pagelog.keyBy(o -> o.getInteger("uid"));
-
-        pageUid.process(new processfilter());
-
+        SingleOutputStreamOperator<JSONObject> win2MinutesPageLogsDs = processStagePageLogDs.keyBy(o -> o.getString("uid")).
+                process(new processfilter())
+                .keyBy(o -> o.getString("uid"))
+                .window(TumblingProcessingTimeWindows.of(Time.minutes(2)))
+                .reduce((value1, value2) -> value2);
+//        win2MinutesPageLogsDs.print();
+        SingleOutputStreamOperator<JSONObject> susdf = win2MinutesPageLogsDs.map(new MapDeviceAndSearchMarkModelFunc(dim_base_categories, device_rate_weight_coefficient, search_rate_weight_coefficient));
+//        susdf.print();
+//        susdf.map(o-> JSON.toJSONString(o)).sinkTo(flinksink.getkafkasink("dwd_page_info"));
 
         env.execute();
     }
@@ -205,32 +247,18 @@ public class dwduser {
         int day = date.getDayOfMonth();
 
 // 定义星座区间映射
-        if ((month == 12 && day >= 22) || (month == 1 && day <= 19)) {
-            return "摩羯座";
-        } else if ((month == 1 && day >= 20) || (month == 2 && day <= 18)) {
-            return "水瓶座";
-        } else if ((month == 2 && day >= 19) || (month == 3 && day <= 20)) {
-            return "双鱼座";
-        } else if ((month == 3 && day >= 21) || (month == 4 && day <= 19)) {
-            return "白羊座";
-        } else if ((month == 4 && day >= 20) || (month == 5 && day <= 20)) {
-            return "金牛座";
-        } else if ((month == 5 && day >= 21) || (month == 6 && day <= 21)) {
-            return "双子座";
-        } else if ((month == 6 && day >= 22) || (month == 7 && day <= 22)) {
-            return "巨蟹座";
-        } else if ((month == 7 && day >= 23) || (month == 8 && day <= 22)) {
-            return "狮子座";
-        } else if ((month == 8 && day >= 23) || (month == 9 && day <= 22)) {
-            return "处女座";
-        } else if ((month == 9 && day >= 23) || (month == 10 && day <= 23)) {
-            return "天秤座";
-        } else if ((month == 10 && day >= 24) || (month == 11 && day <= 22)) {
-            return "天蝎座";
-        } else if ((month == 11 && day >= 23) || (month == 12 && day <= 21)) {
-            return "射手座";
-        }
-        return "未知"; // 默认情况，实际上不会执行到这一步
+        if ((month == 12 && day >= 22) || (month == 1 && day <= 19)) return "摩羯座";
+        else if (month == 1 || month == 2 && day <= 18) return "水瓶座";
+        else if (month == 2 || month == 3 && day <= 20) return "双鱼座";
+        else if (month == 3 || month == 4 && day <= 19) return "白羊座";
+        else if (month == 4 || month == 5 && day <= 20) return "金牛座";
+        else if (month == 5 || month == 6 && day <= 21) return "双子座";
+        else if (month == 6 || month == 7 && day <= 22) return "巨蟹座";
+        else if (month == 7 || month == 8 && day <= 22) return "狮子座";
+        else if (month == 8 || month == 9 && day <= 22) return "处女座";
+        else if (month == 9 || month == 10 && day <= 23) return "天秤座";
+        else if (month == 10 || month == 11 && day <= 22) return "天蝎座";
+        else return "射手座";
     }
     private static int calculateAge(LocalDate birthDate, LocalDate currentDate) {
 // 如果生日日期晚于当前日期，抛出异常
