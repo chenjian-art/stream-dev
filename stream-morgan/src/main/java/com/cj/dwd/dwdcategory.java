@@ -32,7 +32,7 @@ public class dwdcategory {
     public static void main(String[] args) {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
-
+//        读取kafka
         KafkaSource<String> source = KafkaSource.<String>builder()
                 .setBootstrapServers("cdh02:9092")
                 .setTopics("topic_db")
@@ -42,17 +42,17 @@ public class dwdcategory {
                 .build();
 
         DataStreamSource<String> ste = env.fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source");
-
+//        先转换成json在过滤出表
         SingleOutputStreamOperator<JSONObject> orderInfoFit = ste.map(JSON::parseObject)
                 .filter(o -> o.getJSONObject("source").getString("table").equals("order_info"));
-
+//        先转换成json在过滤出表
         SingleOutputStreamOperator<JSONObject> orderDetailFit = ste.map(JSON::parseObject)
                 .filter(o -> o.getJSONObject("source").getString("table").equals("order_detail"));
-
+//        先转换成json在过滤出表
         SingleOutputStreamOperator<JSONObject> compareDic = ste.map(JSON::parseObject)
                 .filter(o -> o.getJSONObject("source").getString("table").equals("category_compare_dic"));
 
-
+//        将获取的表进行关联获取字段信息
         SingleOutputStreamOperator<JSONObject> orderk = orderInfoFit.keyBy(o -> o.getJSONObject("after").getInteger("id"))
                 .intervalJoin(orderDetailFit.keyBy(o -> o.getJSONObject("after").getInteger("order_id")))
                 .between(Time.seconds(-60), Time.seconds(60))
@@ -71,7 +71,7 @@ public class dwdcategory {
                     }
                 });
 
-
+//        异步关联hbase表
         SingleOutputStreamOperator<JSONObject> skuK = orderk.map(
                 new RichMapFunction<JSONObject, JSONObject>() {
 
@@ -235,36 +235,12 @@ public class dwdcategory {
 
             }
         });
-//        process.print();
+//        数据存放kafka
+        process.print();
 //        process.map(o->JSON.toJSONString(o)).sinkTo(flinksink.getkafkasink("dwd_info"));
 
-        KafkaSource<String> source1 = KafkaSource.<String>builder()
-                .setBootstrapServers("cdh02:9092")
-                .setTopics("dwd_user_log")
-                .setGroupId("my-group")
-                .setStartingOffsets(OffsetsInitializer.earliest())
-                .setValueOnlyDeserializer(new SimpleStringSchema())
-                .build();
-
-        DataStreamSource<String> page = env.fromSource(source1, WatermarkStrategy.noWatermarks(), "Kafka Source");
-        SingleOutputStreamOperator<JSONObject> pageM = page.map(JSON::parseObject);
-//        pageM.print();
-
-        SingleOutputStreamOperator<JSONObject> processed = pageM.keyBy(o -> o.getString("uid"))
-                .intervalJoin(process.keyBy(o -> o.getString("user_id")))
-                .between(Time.seconds(-60), Time.seconds(60))
-                .process(new ProcessJoinFunction<JSONObject, JSONObject, JSONObject>() {
-                    @Override
-                    public void processElement(JSONObject jsonObject, JSONObject jsonObject2, ProcessJoinFunction<JSONObject, JSONObject, JSONObject>.Context context, Collector<JSONObject> collector) throws Exception {
-                        jsonObject.putAll(jsonObject2);
-                        jsonObject.remove("uid");
-                        collector.collect(jsonObject);
 
 
-
-                    }
-                });
-        processed.print();
 
 
 

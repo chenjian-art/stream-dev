@@ -34,8 +34,8 @@ public class flinkcdc {
                 .hostname("cdh03")
                 .port(3306)
                 .debeziumProperties(properties)
-                .startupOptions(StartupOptions.initial()) // 全量
-//                .startupOptions(StartupOptions.latest()) // 增量
+//                .startupOptions(StartupOptions.initial()) // 全量
+                .startupOptions(StartupOptions.latest()) // 增量
                 .databaseList("gmall_config") // 设置捕获的数据库， 如果需要同步整个数据库，请将 tableList 设置为 ".*".
                 .tableList("gmall_config.category_compare_dic") // 设置捕获的表
                 .username("root")

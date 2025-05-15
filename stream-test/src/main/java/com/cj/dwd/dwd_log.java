@@ -27,12 +27,12 @@ import org.apache.flink.util.Collector;
 import org.apache.flink.util.OutputTag;
 
 /**
- * @Package com.cj.dwd.dwdlog
+ * @Package com.cj.dwd.dwd_log
  * @Author chen.jian
- * @Date 2025/5/12 上午9:19
+ * @Date 2025/5/15 下午4:03
  * @description:
  */
-public class dwdlog {
+public class dwd_log {
     @SneakyThrows
     public static void main(String[] args) {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();

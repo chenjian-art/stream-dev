@@ -35,39 +35,14 @@ import java.util.List;
  * @description:
  */
 public class dwduser {
-    private static final List<DimBaseCategory> dim_base_categories;
-    private static final Connection connection;
-    private static final double device_rate_weight_coefficient = 0.1;
-    private static final double search_rate_weight_coefficient = 0.15;
 
-    static {
-        try {
-            connection = JdbcUtils.getMySQLConnection(
-                    "jdbc:mysql://cdh03:3306/gmall_config?useSSL=false",
-                    "root",
-                    "root");
-            String sql = "select b3.id,                          \n" +
-                    "            b3.name as b3name,              \n" +
-                    "            b2.name as b2name,              \n" +
-                    "            b1.name as b1name               \n" +
-                    "     from gmall_config.base_category3 as b3  \n" +
-                    "     join gmall_config.base_category2 as b2  \n" +
-                    "     on b3.category2_id = b2.id             \n" +
-                    "     join gmall_config.base_category1 as b1  \n" +
-                    "     on b2.category1_id = b1.id";
-            dim_base_categories = JdbcUtils.queryList2(connection, sql, DimBaseCategory.class, false);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-
-    }
 
 
     @SneakyThrows
     public static void main(String[] args) {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(1);
-
+//        获取kakfa数据
         KafkaSource<String> source = KafkaSource.<String>builder()
                 .setBootstrapServers("cdh02:9092")
                 .setTopics("topic_db")
@@ -77,10 +52,10 @@ public class dwduser {
                 .build();
 
         DataStreamSource<String> ste = env.fromSource(source, WatermarkStrategy.noWatermarks(), "Kafka Source");
-
+//        转成json并过滤出user表数据
         SingleOutputStreamOperator<JSONObject> stre = ste.map(JSON::parseObject)
                 .filter(o -> o.getJSONObject("source").getString("table").equals("user_info"));
-
+//        对日期的格式将天转换成年月日
         SingleOutputStreamOperator<JSONObject> user = stre.map(jsonStr -> {
             JSONObject json = JSON.parseObject(String.valueOf(jsonStr));
             JSONObject after = json.getJSONObject("after");
@@ -94,7 +69,7 @@ public class dwduser {
             return json;
         });
 
-
+//        获取表字段的信息并添加年龄,星座,年代
         SingleOutputStreamOperator<JSONObject> userK = user.map(new RichMapFunction<JSONObject, JSONObject>() {
             @Override
             public JSONObject map(JSONObject jsonObject) throws Exception {
@@ -131,9 +106,9 @@ public class dwduser {
             }
         });
 
-
+//        过滤出表
         SingleOutputStreamOperator<JSONObject> sup = ste.map(JSON::parseObject).filter(o -> o.getJSONObject("source").getString("table").equals("user_info_sup_msg"));
-
+//        获取字段信息
         SingleOutputStreamOperator<JSONObject> supK = sup.map(new RichMapFunction<JSONObject, JSONObject>() {
             @Override
             public JSONObject map(JSONObject jsonObject) throws Exception {
@@ -151,14 +126,14 @@ public class dwduser {
                 return result;
             }
         });
-
+//        判断uid是否存在且部位空
         SingleOutputStreamOperator<JSONObject> finalUserinfoDs = userK.filter(data -> data.containsKey("uid") && !data.getString("uid").isEmpty());
         SingleOutputStreamOperator<JSONObject> finalUserinfoSupDs = supK.filter(data -> data.containsKey("uid") && !data.getString("uid").isEmpty());
-
+//        进行分组
         KeyedStream<JSONObject, String> keyedStreamUserInfoDs = finalUserinfoDs.keyBy(data -> data.getString("uid"));
         KeyedStream<JSONObject, String> keyedStreamUserInfoSupDs = finalUserinfoSupDs.keyBy(data -> data.getString("uid"));
 
-
+//        两表关联
         SingleOutputStreamOperator<JSONObject> ds3 = keyedStreamUserInfoDs.intervalJoin(keyedStreamUserInfoSupDs)
                 .between(Time.minutes(-5), Time.minutes(5))
                 .process(new ProcessJoinFunction<JSONObject, JSONObject, JSONObject>() {
@@ -175,69 +150,12 @@ public class dwduser {
                         collector.collect(result);
                     }
                 });
-
+//        存放kafka
         ds3.print();
 //        ds3.map(o -> JSON.toJSONString(o)).sinkTo(flinksink.getkafkasink("dwd_user_log"));
 
 
-//      page日志信息
-        KafkaSource<String> source1 = KafkaSource.<String>builder()
-                .setBootstrapServers("cdh02:9092")
-                .setTopics("dwd_page")
-                .setGroupId("my-group")
-                .setStartingOffsets(OffsetsInitializer.earliest())
-                .setValueOnlyDeserializer(new SimpleStringSchema())
-                .build();
-
-        DataStreamSource<String> kafkalog = env.fromSource(source1, WatermarkStrategy.noWatermarks(), "Kafka Source");
-
-        SingleOutputStreamOperator<JSONObject> logJson = kafkalog.map(JSON::parseObject);
-
-        SingleOutputStreamOperator<JSONObject> pagelog = logJson.map(new RichMapFunction<JSONObject, JSONObject>() {
-            @Override
-            public JSONObject map(JSONObject jsonObject) throws Exception {
-                JSONObject result = new JSONObject();
-                if (jsonObject.containsKey("common")){
-                    JSONObject common = jsonObject.getJSONObject("common");
-                    result.put("uid",common.getString("uid") != null ? common.getString("uid") : "-1");
-                    result.put("ts",jsonObject.getLongValue("ts"));
-                    JSONObject deviceInfo = new JSONObject();
-                    common.remove("sid");
-                    common.remove("mid");
-                    common.remove("is_new");
-                    deviceInfo.putAll(common);
-                    result.put("deviceInfo",deviceInfo);
-                    if(jsonObject.containsKey("page") && !jsonObject.getJSONObject("page").isEmpty()){
-                        JSONObject pageInfo = jsonObject.getJSONObject("page");
-                        if (pageInfo.containsKey("item_type") && pageInfo.getString("item_type").equals("keyword")){
-                            String item = pageInfo.getString("item");
-                            result.put("search_item",item);
-                        }
-                    }
-                }
-                JSONObject deviceInfo = result.getJSONObject("deviceInfo");
-                String os = deviceInfo.getString("os").split(" ")[0];
-                deviceInfo.put("os",os);
-                return result;
-            }
-        });
-//        pagelog.print();
-        SingleOutputStreamOperator<JSONObject> filtered = pagelog.filter(o -> !o.getString("uid").isEmpty());
-//        filtered.print();
-        KeyedStream<JSONObject, String> keyedSteamLogPage = filtered.keyBy(o -> o.getString("uid"));
-//        keyedSteamLogPage.print();
-        SingleOutputStreamOperator<JSONObject> processStagePageLogDs = keyedSteamLogPage.process(new ProcessFilterRepeatTsDataFunc());
-//        processStagePageLogDs.print();
-
-        SingleOutputStreamOperator<JSONObject> win2MinutesPageLogsDs = processStagePageLogDs.keyBy(o -> o.getString("uid")).
-                process(new processfilter())
-                .keyBy(o -> o.getString("uid"))
-                .window(TumblingProcessingTimeWindows.of(Time.minutes(2)))
-                .reduce((value1, value2) -> value2);
-//        win2MinutesPageLogsDs.print();
-        SingleOutputStreamOperator<JSONObject> susdf = win2MinutesPageLogsDs.map(new MapDeviceAndSearchMarkModelFunc(dim_base_categories, device_rate_weight_coefficient, search_rate_weight_coefficient));
-//        susdf.print();
-//        susdf.map(o-> JSON.toJSONString(o)).sinkTo(flinksink.getkafkasink("dwd_page_info"));
+//
 
         env.execute();
     }

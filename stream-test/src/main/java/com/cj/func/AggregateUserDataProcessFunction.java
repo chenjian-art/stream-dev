@@ -1,7 +1,6 @@
 package com.cj.func;
 
 import com.alibaba.fastjson.JSONObject;
-import com.mysql.cj.xdevapi.Schema;
 import org.apache.flink.api.common.state.MapState;
 import org.apache.flink.api.common.state.MapStateDescriptor;
 import org.apache.flink.api.common.state.ValueState;
@@ -18,12 +17,12 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * @Package com.cj.func.processfilter
+ * @Package com.cj.func.AggregateUserDataProcessFunction
  * @Author chen.jian
- * @Date 2025/5/13 下午4:51
+ * @Date 2025/5/15 下午4:23
  * @description:
  */
-public class processfilter extends KeyedProcessFunction<String, JSONObject, JSONObject> {
+public class AggregateUserDataProcessFunction extends KeyedProcessFunction<String, JSONObject,JSONObject> {
 
     private transient ValueState<Long> pvState;
     private transient MapState<String, Set<String>> fieldsState;
@@ -74,13 +73,14 @@ public class processfilter extends KeyedProcessFunction<String, JSONObject, JSON
         // 构建输出JSON
         JSONObject output = new JSONObject();
         output.put("uid", value.getString("uid"));
-        output.put("ts", value.getLong("ts"));
         output.put("pv", pv);
         output.put("os", String.join(",", getField("os")));
         output.put("ch", String.join(",", getField("ch")));
         output.put("md", String.join(",", getField("md")));
         output.put("ba", String.join(",", getField("ba")));
         output.put("search_item", String.join(",", getField("search_item")));
+        String tsMs = value.getString("ts");
+        output.put("ts_ms",tsMs);
 
         out.collect(output);
     }
@@ -96,5 +96,6 @@ public class processfilter extends KeyedProcessFunction<String, JSONObject, JSON
     private Set<String> getField(String field) throws Exception {
         return fieldsState.get(field) == null ? Collections.emptySet() : fieldsState.get(field);
     }
+
 
 }
