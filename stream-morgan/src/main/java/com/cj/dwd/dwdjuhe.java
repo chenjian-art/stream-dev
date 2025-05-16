@@ -3,11 +3,10 @@ package com.cj.dwd;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.cj.func.JudgmentFunc;
-import com.cj.func.PriceTime;
 import com.cj.func.pricebase;
+import com.cj.util.flinksink;
 import lombok.SneakyThrows;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
-import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
 import org.apache.flink.connector.kafka.source.KafkaSource;
 import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
@@ -16,12 +15,8 @@ import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.ProcessFunction;
 import org.apache.flink.streaming.api.functions.co.ProcessJoinFunction;
-
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.util.Collector;
-import org.apache.paimon.flink.procedure.ProcedureBase;
-
-import java.rmi.server.UID;
 
 /**
  * @Package com.cj.dwd.dwdjuhe
@@ -67,7 +62,7 @@ public class dwdjuhe {
                 .between(Time.seconds(-60), Time.seconds(60))
                 .process(new ProcessJoinFunction<JSONObject, JSONObject, JSONObject>() {
                     @Override
-                    public void processElement(JSONObject jsonObject, JSONObject jsonObject2, ProcessJoinFunction<JSONObject, JSONObject, JSONObject>.Context context, Collector<JSONObject> collector) throws Exception {
+                    public void processElement(JSONObject jsonObject, JSONObject jsonObject2, ProcessJoinFunction<JSONObject, JSONObject, JSONObject>.Context context, Collector<JSONObject> collector) {
                         jsonObject.putAll(jsonObject2);
                         jsonObject.remove("uid");
                         collector.collect(jsonObject);
@@ -93,7 +88,7 @@ public class dwdjuhe {
                 .between(Time.days(-5), Time.days(5))
                 .process(new ProcessJoinFunction<JSONObject, JSONObject, JSONObject>() {
                     @Override
-                    public void processElement(JSONObject jsonObject, JSONObject jsonObject2, ProcessJoinFunction<JSONObject, JSONObject, JSONObject>.Context context, Collector<JSONObject> collector) throws Exception {
+                    public void processElement(JSONObject jsonObject, JSONObject jsonObject2, ProcessJoinFunction<JSONObject, JSONObject, JSONObject>.Context context, Collector<JSONObject> collector) {
                         jsonObject.putAll(jsonObject2);
                         jsonObject.remove("uid");
                         collector.collect(jsonObject);
@@ -121,7 +116,7 @@ public class dwdjuhe {
                 .between(Time.days(-5), Time.days(5))
                 .process(new ProcessJoinFunction<JSONObject, JSONObject, JSONObject>() {
                     @Override
-                    public void processElement(JSONObject jsonObject, JSONObject jsonObject2, ProcessJoinFunction<JSONObject, JSONObject, JSONObject>.Context context, Collector<JSONObject> collector) throws Exception {
+                    public void processElement(JSONObject jsonObject, JSONObject jsonObject2, ProcessJoinFunction<JSONObject, JSONObject, JSONObject>.Context context, Collector<JSONObject> collector) {
 
                         JSONObject after = jsonObject2.getJSONObject("after");
                         jsonObject.putAll(after);
@@ -137,13 +132,18 @@ public class dwdjuhe {
         //判断年龄的区间
         SingleOutputStreamOperator<JSONObject> operator = mapped.process(new ProcessFunction<JSONObject, JSONObject>() {
             @Override
-            public void processElement(JSONObject jsonObject, ProcessFunction<JSONObject, JSONObject>.Context context, Collector<JSONObject> collector) throws Exception {
+            public void processElement(JSONObject jsonObject, ProcessFunction<JSONObject, JSONObject>.Context context, Collector<JSONObject> collector) {
                 jsonObject.put("age_qj", JudgmentFunc.ageJudgment(jsonObject.getInteger("age")));
                 collector.collect(jsonObject);
             }
         });
         operator.print();
-
+        //将结果成一个csv文件
+        operator.writeAsText("D:\\workspace\\2207A\\实训\\stream-dev222222\\docx\\output.csv").setParallelism(1);
+        //将数据写入kafka
+        operator.map(JSON::toJSONString).sinkTo(
+                flinksink.getkafkasink("dwd_broad")
+        );
         env.execute();
     }
 }

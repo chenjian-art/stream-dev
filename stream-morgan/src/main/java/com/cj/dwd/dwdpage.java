@@ -122,7 +122,7 @@ public class dwdpage {
         win2MinutesPageLogsDs.map(o-> JSON.toJSONString(o)).sinkTo(flinksink.getkafkasink("dwd_v2_page_info"));
 //        打分
         SingleOutputStreamOperator<JSONObject> susdf = win2MinutesPageLogsDs.map(new MapDeviceAndSearchMarkModelFunc(dim_base_categories, device_rate_weight_coefficient, search_rate_weight_coefficient));
-//        susdf.print();
+        susdf.print();
 //        susdf.map(o-> JSON.toJSONString(o)).sinkTo(flinksink.getkafkasink("dwd_page_info"));
 
         env.execute();

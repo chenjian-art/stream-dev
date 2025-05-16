@@ -2,9 +2,11 @@
   <dictionary name="DAJIBA">
     <words>
       <w>dwdcategory</w>
+      <w>dwdjuhe</w>
       <w>dwduser</w>
       <w>kafkalog</w>
       <w>orderinfo</w>
+      <w>tringf</w>
     </words>
   </dictionary>
 </component>
